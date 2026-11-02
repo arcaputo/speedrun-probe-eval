@@ -1,6 +1,6 @@
 """Probes for the modded-nanogpt speedrun on one H100: bounded experiments the agent runs during its turn.
 
-Kupanga starts this with PROBE_KIND (a kind under [eval.probe] in eval.toml), PROBE_<PARAM> for each parameter
+Kupanga starts this with PROBE_KIND (an experiment proc under [eval.procs] in eval.toml), PROBE_<PARAM> for each parameter
 (PROBE_STEPS, PROBE_NUM_ITERATIONS) and HARNESS_PROBE=1, plus the usual HARNESS_* variables. Parameters, bounds,
 defaults and max_wall_s are read from eval.toml, so they are stated once.
 
@@ -93,7 +93,11 @@ def stage(name: str) -> None:
 # ---------------------------------------------------------------- kinds and parameters
 
 def load_kinds(path: Path = HERE / "eval.toml") -> dict:
-    return tomllib.loads(path.read_text())["eval"]["probe"]
+    """The experiment procs of eval.toml ([eval.procs.<kind>]; [eval.probe.<kind>] before procs), by kind."""
+    body = tomllib.loads(path.read_text())["eval"]
+    if "procs" not in body:
+        return body["probe"]
+    return {k: v for k, v in body["procs"].items() if v.get("class") == "experiment"}
 
 
 def parse_params(kind: str, env: dict | None = None, kinds: dict | None = None) -> dict:

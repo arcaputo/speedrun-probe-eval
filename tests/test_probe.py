@@ -35,10 +35,11 @@ REAL = (HERE / "fixtures" / "train_gpt_mtpmed.py").read_text()
 
 # ---------------------------------------------------------------- eval.toml and parameters
 
-def test_eval_toml_is_a_probe_eval_with_the_two_kinds():
+def test_eval_toml_is_a_procs_eval_with_the_two_kinds():
     cfg = tomllib.loads((EVAL / "eval.toml").read_text())["eval"]
-    assert (cfg["type"], cfg["evaluator"], cfg["entrypoint"]) == ("probe", "deterministic", "python probe.py")
-    kinds = cfg["probe"]
+    assert (cfg["type"], cfg["evaluator"], cfg["entrypoint"]) == ("procs", "deterministic", "python probe.py")
+    kinds = cfg["procs"]
+    assert {k["class"] for k in kinds.values()} == {"experiment"}
     assert set(kinds) == {"loss-vs-parent", "full-run-1gpu"}
     job = tomllib.loads((EVAL / "job.toml").read_text())
     for name, k in kinds.items():
@@ -52,6 +53,8 @@ def test_eval_toml_is_a_probe_eval_with_the_two_kinds():
     assert {"parent_val_loss", "candidate_val_loss", "val_steps", "ms_per_step", "parent_ms_per_step",
             "val_loss_delta", "critique"} <= set(kinds["loss-vs-parent"]["outputs"])
     assert {"val_loss", "steps", "train_time_s", "ms_per_step", "critique"} <= set(kinds["full-run-1gpu"]["outputs"])
+    # full-run-1gpu runs one code, so Kupanga runs the parent beside it; loss-vs-parent measures the parent itself
+    assert (kinds["full-run-1gpu"]["baseline"], kinds["loss-vs-parent"]["baseline"]) == ("parent", "in-job")
 
 
 def test_every_stage_probe_prints_is_listed():

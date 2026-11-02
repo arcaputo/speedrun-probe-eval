@@ -7,12 +7,12 @@ anything and finished +2.17 s against its parent with 0.0074 of loss headroom un
 questions it lacked: is the candidate's loss ahead of the parent's at the same step, and what val loss does a
 whole run reach at a chosen step count. Design: `notes/gpu-probes-design.md`.
 
-A probe eval (`type = "probe"`) is never a gate or a score and never runs after a turn. Its numbers are on one
+A procs eval (`type = "procs"`, formerly `type = "probe"`) is never a gate or a score and never runs after a turn. Its numbers are on one
 GPU, so they aren't the benchmark's.
 
 | File | What it is |
 |---|---|
-| `eval.toml` | `type = "probe"`, `python probe.py`, the two kinds with their parameters, `max_wall_s`, stages and outputs |
+| `eval.toml` | `type = "procs"`, `python probe.py`, the two kinds as experiment procs (`[eval.procs.<kind>]`) with their parameters, `max_wall_s`, stages and outputs |
 | `job.toml` | `python:3.12`, 1×H100 (spot, 3 retries), 16+ CPUs, 64+ GB, `timeout_s` 2100 (the largest `max_wall_s`) |
 | `requirements.txt` | speedrun-8xh100's pinned stack (a copy, as in speedrun-perf) |
 | `bench.py` | speedrun-8xh100's `bench.py` (a copy): data, CUDA headers, hub kernels, parent rebuild, `failure_excerpt` |
@@ -70,6 +70,12 @@ H100 (estimated, not yet measured), so five of them cost under a minute per code
 validation set keeps that source of noise out.
 
 ### full-run-1gpu (`num_iterations`: 1500–2600, optional)
+
+`baseline = "parent"`: this kind runs only the code it is given, so Kupanga also runs it on the parent's code (the
+node's starting code) with the same `num_iterations`, the first time a node asks for those params, and the agent's
+report gives candidate, parent and delta for `val_loss`, `steps` and the timings. That first request holds twice the
+time limit below; later ones reuse the parent's numbers. loss-vs-parent is `baseline = "in-job"`: it measures the
+parent itself every time (it doesn't read `$HARNESS_BASELINE_FILE` or report a `parent` object).
 
 1. In a temporary copy of the candidate's code, sets `val_loss_every` to 0 (validation only after the last step,
    which saves about 10 passes) and, if given, `num_iterations` to the parameter.
