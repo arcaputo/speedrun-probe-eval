@@ -442,3 +442,20 @@ def test_a_bad_parameter_exits_zero_with_no_result(tmp_path):
     env = {**os.environ, "HARNESS_RESULT_FILE": str(out), "PROBE_KIND": "loss-vs-parent", "PROBE_STEPS": "9000"}
     p = subprocess.run([sys.executable, str(EVAL / "probe.py")], env=env, capture_output=True, text=True)
     assert p.returncode == 0 and "PROBE_STEPS=9000 is outside 100–500" in p.stdout and not out.exists()
+
+
+def test_step_lines_are_echoed_for_the_progress_pattern(capsys: pytest.CaptureFixture[str]) -> None:
+    import re
+    text = "".join(f"step:{i}/2380 train_time:{i * 50}ms step_avg:50.00ms\n" for i in range(1, 21))
+    text += "step:20/2380 val_loss:5.1234 train_time:1000ms step_avg:50.00ms\nstep:21/2380 train_ti"
+    done = probe.echo_progress("candidate", text, 0)
+    assert done == 21 and probe.echo_progress("candidate", text, done) == 21  # nothing twice, nor the partial line
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["candidate step:10/2380 train_time:500ms step_avg:50.00ms",
+                   "candidate step:20/2380 train_time:1000ms step_avg:50.00ms",
+                   "candidate step:20/2380 val_loss:5.1234 train_time:1000ms step_avg:50.00ms"]
+    for kind in tomllib.loads((EVAL / "eval.toml").read_text())["eval"]["procs"].values():
+        rx = re.compile(kind["progress_regex"])
+        assert [m.groupdict() for m in map(rx.search, out[1:])] == [
+            {"code": "candidate", "step": "20", "of": "2380", "val_loss": None, "train_time_ms": "1000"},
+            {"code": "candidate", "step": "20", "of": "2380", "val_loss": "5.1234", "train_time_ms": "1000"}]

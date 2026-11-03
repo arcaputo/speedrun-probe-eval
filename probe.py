@@ -74,6 +74,7 @@ SAVE_DIR = os.environ.get("SPEEDRUN_PROBE_SAVE_DIR")
 #   step:{step}/{train_steps} val_loss:{val_loss:.4f} train_time:{training_time_ms:.0f}ms ...  (validation)
 TRAIN_STEP = re.compile(r"^step:(\d+)/(\d+) train_time:(\d+)ms", re.M)
 VAL_STEP = re.compile(r"^step:(\d+)/(\d+) val_loss:(-?[\d.]+|nan|-?inf) train_time:(\d+)ms", re.M)
+PROGRESS_EVERY = 10  # every this many training steps, and every validation, is echoed for inspect(id, "progress")
 SEED_NOTE = ("train_gpt.py seeds nothing itself, so both codes start from torch's default seed, but GPU kernels "
              "aren't bit-deterministic")
 
@@ -83,6 +84,18 @@ NL = "\n"
 
 class InfraError(Exception):
     """A failure that isn't the candidate's: the probe ends with no result."""
+
+
+def echo_progress(label: str, text: str, done: int) -> int:
+    """Print the run's step lines past the first `done` complete lines, prefixed with its label (every
+    PROGRESS_EVERY-th training step and each validation), so eval.toml's progress_regex sees them in the job's
+    output; returns the complete lines looked at."""
+    lines = text.split(NL)[:-1]  # the last is still being written
+    for line in lines[done:]:
+        m = TRAIN_STEP.match(line)
+        if VAL_STEP.match(line) or (m and int(m.group(1)) % PROGRESS_EVERY == 0):
+            print(f"{label} {line[:200]}", flush=True)
+    return len(lines)
 
 
 def stage(name: str) -> None:
@@ -323,9 +336,11 @@ def run(code: Path, data: Path, cache: Path, label: str, timeout: float, done: C
                              stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
         stage(f"compiling {label}")
         training = validating = False
+        echoed = 0  # complete lines of the run's output looked at so far
         while True:
             time.sleep(1)
             text = out.read_text(errors="replace")
+            echoed = echo_progress(label, text, echoed)
             lines = train_lines(text)
             if lines and not training:
                 training = True
